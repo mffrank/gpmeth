@@ -16,7 +16,28 @@ InputData = Union[tf.Tensor]
 OutputData = Union[tf.Tensor]
 RegressionData = Tuple[InputData, OutputData]
 
-class Constant(BayesianModel):
+
+def get_data(data: Union[RegressionData, OutputData]):
+    """Return Tuple of input and output even if only output is given."""
+    if isinstance(data, tuple):
+        X, Y = data
+    else:
+        X, Y = None, data
+    return X, Y
+
+
+class Model(BayesianModel):
+    def to_dict(self):
+        return gpflow.utilities.read_values(self)
+
+    @classmethod
+    def from_dict(cls, param_dict: dict):
+        obj = cls()
+        gpflow.utilities.multiple_assign(obj, param_dict)
+        return obj
+
+
+class Constant(Model):
     """Models outputs with a constant rate"""
 
     def __init__(self, mu=0.5):
@@ -41,7 +62,7 @@ class Constant(BayesianModel):
         return mu, mu - tf.square(mu)
 
 
-class ConstantCategorical(BayesianModel):
+class ConstantCategorical(Model):
     """Models output with a constant rate per category. Assumes the last column of the input is specifying a category."""
 
     def __init__(self, mu=[0], n_categories=1):
@@ -49,6 +70,13 @@ class ConstantCategorical(BayesianModel):
         self._mu = gpflow.Parameter(mu)
         self.n_categories = n_categories
         self.categories = np.arange(n_categories)
+
+    @classmethod
+    def from_dict(cls, param_dict: dict):
+        # Init model with correct shapes for multiple_assign to work
+        obj = cls(mu=np.zeros_like(param_dict["._mu"]))
+        gpflow.utilities.multiple_assign(obj, param_dict)
+        return obj
 
     def get_categories_from_data(self, data: RegressionData) -> Tuple:
         X, Y = data
@@ -93,7 +121,7 @@ class ConstantCategorical(BayesianModel):
         return tf.convert_to_tensor(mu), mu - tf.square(mu)
 
 
-class GPmodel(gpflow.models.SVGP):
+class GPmodel(gpflow.models.SVGP, Model):
     """Handles the commonalities of all gp models in gpmeth."""
 
     def __init__(
@@ -110,6 +138,7 @@ class GPmodel(gpflow.models.SVGP):
             )
         if mean_function is None:
             mean_function = gpflow.mean_functions.Constant(0)
+            gpflow.utilities.set_trainable(mean_function, False)
         super().__init__(
             likelihood=likelihood,
             inducing_variable=inducing_variable,
@@ -118,8 +147,12 @@ class GPmodel(gpflow.models.SVGP):
             **kwargs
         )
 
-    def initialize_params(self, data: RegressionData):
-        pass
+    @classmethod
+    def from_dict(cls, param_dict: dict):
+        # Init model with correct shapes for multiple_assign to work
+        obj = cls(inducing_variable=np.zeros_like(param_dict[".inducing_variable.Z"]))
+        gpflow.utilities.multiple_assign(obj, param_dict)
+        return obj
 
     def optimize(
         self,
