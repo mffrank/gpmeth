@@ -1,3 +1,4 @@
+from gpflow import inducing_variables
 import tensorflow as tf
 import gpflow
 import tensorflow_probability as tfp
@@ -5,30 +6,35 @@ import numpy as np
 from typing import Callable, Iterator, Optional, Tuple, TypeVar, Union
 from gpflow.models.model import (
     BayesianModel,
-    InputData,
     MeanAndVariance,
-    RegressionData,
 )
 from scipy import optimize
+from . import util
+from . import inducing
 
+InputData = Union[tf.Tensor]
+OutputData = Union[tf.Tensor]
+RegressionData = Tuple[InputData, OutputData]
 
 class Constant(BayesianModel):
     """Models outputs with a constant rate"""
 
     def __init__(self, mu=0.5):
         super().__init__()
-        self._mu = gpflow.Parameter(mu)
+        self._mu = gpflow.Parameter(mu, transform=util.InvProbit())
 
     @property
     def n_parameters(self) -> int:
         return 1
 
     def optimize(self, data: np.ndarray) -> optimize.OptimizeResult:
-        self._mu = data.mean()
+        _, Y = get_data(data)
+        self._mu.assign(Y.mean())
         return optimize.OptimizeResult(success=True)
 
     def maximum_log_likelihood_objective(self, data) -> tf.Tensor:
-        return tf.reduce_sum(tfp.distributions.Bernoulli(probs=self._mu).log_prob(data))
+        _, Y = get_data(data)
+        return tf.reduce_sum(tfp.distributions.Bernoulli(probs=self._mu).log_prob(Y))
 
     def predict_y(self, Xnew: InputData) -> MeanAndVariance:
         mu = tf.ones_like(Xnew[:, 0]) * self._mu
@@ -40,7 +46,7 @@ class ConstantCategorical(BayesianModel):
 
     def __init__(self, mu=[0], n_categories=1):
         super().__init__()
-        self._mu = mu
+        self._mu = gpflow.Parameter(mu)
         self.n_categories = n_categories
         self.categories = np.arange(n_categories)
 
@@ -50,7 +56,7 @@ class ConstantCategorical(BayesianModel):
         self.categories = np.unique(cat)
         self.n_categories = len(self.categories)
         if self._mu.shape != self.categories.shape:
-            self._mu = np.zeros_like(self.categories)
+            self._mu = gpflow.Parameter(np.zeros_like(self.categories))
         return X, Y, cat
 
     @property
@@ -59,8 +65,10 @@ class ConstantCategorical(BayesianModel):
 
     def optimize(self, data: RegressionData) -> optimize.OptimizeResult:
         X, Y, cat = self.get_categories_from_data(data)
+        mu = self._mu.numpy()
         for i in self.categories:
-            self._mu[self.categories == i] = np.mean(Y[cat == i, -1])
+            mu[self.categories == i] = np.mean(Y[cat == i, -1])
+        self._mu.assign(mu)
 
         return optimize.OptimizeResult(success=True)
 
@@ -113,27 +121,53 @@ class GPmodel(gpflow.models.SVGP):
     def initialize_params(self, data: RegressionData):
         pass
 
-    def optimize(self, data: RegressionData) -> optimize.OptimizeResult:
+    def optimize(
+        self,
+        data: RegressionData,
+        compute_inducing_points: bool = True,
+        *args,
+        **kwargs
+    ) -> optimize.OptimizeResult:
+        """Fit the model to data."""
         X, Y = data
+        if compute_inducing_points:
+            self.inducing_variable = gpflow.models.util.inducingpoint_wrapper(
+                self.get_inducing_points(X, *args, **kwargs)
+            )
+            num_inducing = self.inducing_variable.num_inducing
+            self._init_variational_parameters(
+                num_inducing=num_inducing, q_mu=None, q_sqrt=None, q_diag=None
+            )
+        # Set the mean function to the mean of the data
+        self.mean_function.c.assign(util.InvProbit()._inverse(Y.mean()))
         o = gpflow.optimizers.Scipy()
         training_loss = self.training_loss_closure((X, Y))
         fitres = o.minimize(training_loss, variables=self.trainable_variables)
         return fitres
 
+    def get_inducing_points(
+        self,
+        X: InputData,
+        inducing_point_function: Callable = inducing.make_grid_inducing_points,
+        *args,
+        **kwargs
+    ):
+        return inducing_point_function(X, *args, **kwargs)
+
 
 class ConstantLinear(GPmodel):
-    def __init__(self, pseudotime_dims=[0]):
+    def __init__(self, pseudotime_dims=[0], *args, **kwargs):
         kernel = gpflow.kernels.Constant() + gpflow.kernels.Linear(
             active_dims=pseudotime_dims
         )
-        super().__init__(kernel=kernel)
+        super().__init__(kernel=kernel, *args, **kwargs)
 
 
 class RBFLinear(GPmodel):
-    def __init__(self, pseudotime_dims=[0], genome_dims=[1]):
+    def __init__(self, pseudotime_dims=[0], genome_dims=[1], *args, **kwargs):
         pskern = gpflow.kernels.RBF(active_dims=pseudotime_dims)
         gnkern = gpflow.kernels.Constant() + gpflow.kernels.Linear(
             active_dims=genome_dims
         )
         kernel = pskern * gnkern
-        super().__init__(kernel=kernel)
+        super().__init__(kernel=kernel, *args, **kwargs)
