@@ -15,5 +15,5 @@ requires = [
   "gpflow >=2.2.0",
   "pandas",
   "numpy",
-  "scipy"
+  "matplotlib"
 ]
