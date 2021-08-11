@@ -2,16 +2,18 @@
 requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
-[project]
-name = "gpmeth"
-authors = [{name = "Max Frank", email = "max.frank@embl.de"}]
+[tool.flit.metadata]
+module = "gpmeth"
+author = "Max Frank"
+author-email = "max.frank@embl.de"
+
 classifiers = ["License :: OSI Approved :: MIT License"]
-dynamic = ["version", "description"]
+# dynamic = ["version", "description"]
 requires-python = ">=3.6"
 
-dependencies = [
-    "gpflow >2.2.0",
-    "pandas",
-    "numpy",
-    "scipy",
+requires = [
+  "gpflow >=2.2.0",
+  "pandas",
+  "numpy",
+  "scipy"
 ]
