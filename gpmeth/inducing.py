@@ -30,7 +30,9 @@ def make_grid(num_points: int, lower: int = -1, upper: int = 1, input_dim: int =
     return grid
 
 
-def make_grid_inducing_points(X: InputData, num_points: int = 100, extend: int = 0):
+def make_grid_inducing_points(
+    X: InputData, num_points: int = 100, extend: int = 0, *args, **kwargs
+):
     input_dim = X.shape[1]
     n_points_axis = int(num_points ** (1 / input_dim))
     minima = np.amin(X, axis=0)

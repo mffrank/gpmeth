@@ -160,12 +160,32 @@ class GPmodel(gpflow.models.SVGP, Model):
     def optimize(
         self,
         data: RegressionData,
-        compute_inducing_points: bool = True,
+        initialize_parameters: bool = True,
         *args,
         **kwargs,
     ) -> optimize.OptimizeResult:
         """Fit the model to data."""
+
+        if initialize_parameters:
+            self.initialize_parameters_from_data(data, *args, **kwargs)
+
+        # Do the optimization
+        o = gpflow.optimizers.Scipy()
+        training_loss = self.training_loss_closure(data)
+        fitres = o.minimize(training_loss, variables=self.trainable_variables)
+        return fitres
+
+    def initialize_parameters_from_data(
+        self,
+        data: RegressionData,
+        compute_inducing_points: bool = True,
+        *args,
+        **kwargs,
+    ):
+        """Initialize parameters according to the input data in a sensible way."""
         X, Y = data
+
+        # Compute inducing points
         if compute_inducing_points:
             self.inducing_variable = gpflow.models.util.inducingpoint_wrapper(
                 self.get_inducing_points(X, *args, **kwargs)
@@ -174,12 +194,12 @@ class GPmodel(gpflow.models.SVGP, Model):
             self._init_variational_parameters(
                 num_inducing=num_inducing, q_mu=None, q_sqrt=None, q_diag=None
             )
+
         # Set the mean function to the mean of the data
         self.mean_function.c.assign(util.InvProbit()._inverse(Y.mean()))
-        o = gpflow.optimizers.Scipy()
-        training_loss = self.training_loss_closure((X, Y))
-        fitres = o.minimize(training_loss, variables=self.trainable_variables)
-        return fitres
+
+        # Initialize lengthscales according to data
+        self.initialize_lengthscales(X=X, *args, **kwargs)
 
     def get_inducing_points(
         self,
@@ -189,6 +209,19 @@ class GPmodel(gpflow.models.SVGP, Model):
         **kwargs,
     ):
         return inducing_point_function(X, *args, **kwargs)
+
+    def initialize_lengthscales(self, X: InputData, span_fraction: float = 0.1):
+        var_dict = gpflow.utilities.parameter_dict(self)
+        for k, v in var_dict.items():
+            if k.endswith("lengthscales") and v.trainable:
+                attr = k.replace(".lengthscales", "").lstrip(".")
+                print(attr)
+                kern = self.__getattribute__(attr)
+                ad = kern.active_dims
+                ls = span_fraction * (X[:, ad].max(axis=0) - X[:, ad].min(axis=0))
+                if len(ls) == 1:
+                    ls = ls[0]
+                v.assign(ls)
 
     def plot_predictions(
         self,
