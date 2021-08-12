@@ -8,9 +8,12 @@ from gpflow.models.model import (
     BayesianModel,
     MeanAndVariance,
 )
+import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy import optimize
 from . import util
 from . import inducing
+from . import plotting
 
 InputData = Union[tf.Tensor]
 OutputData = Union[tf.Tensor]
@@ -129,7 +132,7 @@ class GPmodel(gpflow.models.SVGP, Model):
         inducing_variable: Optional[np.array] = None,
         mean_function: Optional[gpflow.mean_functions.MeanFunction] = None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         likelihood = gpflow.likelihoods.Bernoulli()
         if inducing_variable is None:
@@ -144,7 +147,7 @@ class GPmodel(gpflow.models.SVGP, Model):
             inducing_variable=inducing_variable,
             mean_function=mean_function,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
@@ -159,7 +162,7 @@ class GPmodel(gpflow.models.SVGP, Model):
         data: RegressionData,
         compute_inducing_points: bool = True,
         *args,
-        **kwargs
+        **kwargs,
     ) -> optimize.OptimizeResult:
         """Fit the model to data."""
         X, Y = data
@@ -183,9 +186,31 @@ class GPmodel(gpflow.models.SVGP, Model):
         X: InputData,
         inducing_point_function: Callable = inducing.make_grid_inducing_points,
         *args,
-        **kwargs
+        **kwargs,
     ):
         return inducing_point_function(X, *args, **kwargs)
+
+    def plot_predictions(
+        self,
+        data: RegressionData,
+        n_grid: int = 1000,
+        plot_inducing: bool = False,
+        *args,
+        **kwargs,
+    ):
+        X, Y = data
+        fig, ax = plt.subplots()
+        # Plot data
+        g = plotting.plot_input_data(data, ax)
+        # Plot predictions
+        X_gr = inducing.make_grid_inducing_points(X, n_grid, *args, **kwargs)
+        p, _ = self.predict_y(X_gr)
+        g = plotting.plot_prediction_contours(X_gr=X_gr, p=p, ax=ax, fixed_clevels=True)
+        # Plot inducing points
+        if plot_inducing:
+            g = plotting.plot_inducing_points(self, ax=ax)
+
+        return g
 
 
 class ConstantLinear(GPmodel):

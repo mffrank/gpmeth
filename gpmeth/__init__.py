@@ -3,6 +3,7 @@
 from . import models
 from . import util
 from . import inducing
+from . import plotting
 
 # from .models import Constant
 
