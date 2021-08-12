@@ -218,6 +218,13 @@ class GPmodel(gpflow.models.SVGP, Model):
     def initialize_lengthscales(self, X: InputData, span_fraction: float = 0.1):
         util.initialize_kernel_lengthscales(self, X, span_fraction)
 
+    def initialize_kernel_variances(
+        self, variance_value: float = 1, only_trainable: bool = True
+    ):
+        for k, v in gpflow.utilities.parameter_dict(self).items():
+            if k.endswith(".variance") and (v.trainable or not only_trainable):
+                v.assign(variance_value)
+
     def plot_predictions(
         self,
         data: RegressionData,
