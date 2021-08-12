@@ -1,6 +1,9 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
+import gpflow
 import numpy as np
+
+from .models import InputData
 
 
 class InvProbit(tfp.bijectors.Bijector):
@@ -17,3 +20,26 @@ class InvProbit(tfp.bijectors.Bijector):
 
     def _inverse(self, y):
         return np.sqrt(2.0) * tf.math.erfinv(2 * y - 1)
+
+
+def initialize_kernel_lengthscales(
+    input_module: tf.Module, X: InputData, span_fraction: float = 0.1
+):
+    """Visit all kernels with lengtscale parameters and update with a fraction of the input data span."""
+    target_types = (gpflow.kernels.Stationary, gpflow.kernels.Periodic)
+    input_name, state = input_module.__class__.__name__, dict()
+    accumulator = (input_name, state)
+
+    def update_state(kernel, _, state):
+        if kernel.lengthscales.trainable:
+            ad = kernel.active_dims
+            ls = span_fraction * (X[:, ad].max(axis=0) - X[:, ad].min(axis=0))
+            if len(ls) == 1:
+                ls = ls[0]
+            kernel.lengthscales.assign(ls)
+        return state
+
+    _ = gpflow.utilities.traversal.traverse_module(
+        input_module, accumulator, update_state, target_types
+    )
+    return

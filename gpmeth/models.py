@@ -211,17 +211,7 @@ class GPmodel(gpflow.models.SVGP, Model):
         return inducing_point_function(X, *args, **kwargs)
 
     def initialize_lengthscales(self, X: InputData, span_fraction: float = 0.1):
-        var_dict = gpflow.utilities.parameter_dict(self)
-        for k, v in var_dict.items():
-            if k.endswith("lengthscales") and v.trainable:
-                attr = k.replace(".lengthscales", "").lstrip(".")
-                print(attr)
-                kern = self.__getattribute__(attr)
-                ad = kern.active_dims
-                ls = span_fraction * (X[:, ad].max(axis=0) - X[:, ad].min(axis=0))
-                if len(ls) == 1:
-                    ls = ls[0]
-                v.assign(ls)
+        util.initialize_kernel_lengthscales(self, X, span_fraction)
 
     def plot_predictions(
         self,
