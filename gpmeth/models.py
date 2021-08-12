@@ -256,11 +256,96 @@ class ConstantLinear(GPmodel):
         super().__init__(kernel=kernel, *args, **kwargs)
 
 
-class RBFLinear(GPmodel):
-    def __init__(self, pseudotime_dims=[0], genome_dims=[1], *args, **kwargs):
-        pskern = gpflow.kernels.RBF(active_dims=pseudotime_dims)
-        gnkern = gpflow.kernels.Constant() + gpflow.kernels.Linear(
-            active_dims=genome_dims
+class ConstantMatern(GPmodel):
+    def __init__(self, pseudotime_dims=[0], *args, **kwargs):
+        kernel = gpflow.kernels.Constant() + gpflow.kernels.Matern32(
+            active_dims=pseudotime_dims
         )
-        kernel = pskern * gnkern
+        super().__init__(kernel=kernel, *args, **kwargs)
+
+
+class RBFConstant(GPmodel):
+    def __init__(
+        self, genome_dims=[1], fixed_genome_lengthscale=False, *args, **kwargs
+    ):
+        gnkern = gpflow.kernels.RBF(active_dims=genome_dims, lengthscales=100)
+        if fixed_genome_lengthscale:
+            gpflow.set_trainable(gnkern.lengthscales, False)
+        kernel = gnkern
+        super().__init__(kernel=kernel, *args, **kwargs)
+
+
+class GPFullModel(GPmodel):
+    """Implements from_null to initialize with a pretrained null model"""
+
+    @classmethod
+    def from_null(cls, null_model: GPmodel, null_kernel_trainable: bool = False):
+        """Creates this model from a null model (must have the same kernel as this models nullkern)"""
+
+        # Adjust Null model parameters to fit in full model
+        param_dict = gpflow.utilities.parameter_dict(null_model)
+        param_dict = {
+            k.replace("kernel", "kernel.kernels[0]"): v for k, v in param_dict.items()
+        }
+
+        # Init model with correct shapes for multiple_assign to work
+        obj = cls(inducing_variable=np.zeros_like(param_dict[".inducing_variable.Z"]))
+        gpflow.utilities.multiple_assign(obj, param_dict)
+
+        if not null_kernel_trainable:
+            gpflow.utilities.set_trainable(obj.kernel.kernels[0], False)
+
+        # Set remaining variances low in the beginning
+        obj.initialize_kernel_variances(variance_value=0.0001, only_trainable=True)
+
+        return obj
+
+
+class RBFLinear(GPFullModel):
+    """Model with a product kernel: RBF(genome) * Linear(pseudotime)"""
+
+    def __init__(
+        self,
+        pseudotime_dims=[0],
+        genome_dims=[1],
+        fixed_genome_lengthscale=False,
+        *args,
+        **kwargs,
+    ):
+        nullkern = gpflow.kernels.RBF(active_dims=genome_dims, lengthscales=100)
+        if fixed_genome_lengthscale:
+            gpflow.set_trainable(nullkern.lengthscales, False)
+
+        gnkern = gpflow.kernels.RBF(active_dims=genome_dims)
+        pskern = gpflow.kernels.Constant() + gpflow.kernels.Linear(
+            active_dims=pseudotime_dims
+        )
+        # In a product kernel the variances become connected
+        gpflow.utilities.set_trainable(gnkern.variance, False)
+
+        kernel = nullkern + pskern * gnkern
+        super().__init__(kernel=kernel, *args, **kwargs)
+
+
+class RBFMatern(GPFullModel):
+    """Model with a product kernel: RBF(genome) * Linear(pseudotime)"""
+
+    def __init__(
+        self,
+        pseudotime_dims=[0],
+        genome_dims=[1],
+        fixed_genome_lengthscale=False,
+        *args,
+        **kwargs,
+    ):
+        nullkern = gpflow.kernels.RBF(active_dims=genome_dims, lengthscales=100)
+        if fixed_genome_lengthscale:
+            gpflow.set_trainable(nullkern.lengthscales, False)
+
+        gnkern = gpflow.kernels.RBF(active_dims=genome_dims)
+        pskern = gpflow.kernels.Matern32(active_dims=pseudotime_dims)
+        # In a product kernel the variances become connected
+        gpflow.utilities.set_trainable(gnkern.variance, False)
+
+        kernel = nullkern + pskern * gnkern
         super().__init__(kernel=kernel, *args, **kwargs)
