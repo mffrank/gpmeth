@@ -142,6 +142,11 @@ class GPmodel(gpflow.models.SVGP, Model):
         if mean_function is None:
             mean_function = gpflow.mean_functions.Constant(0)
             gpflow.utilities.set_trainable(mean_function, False)
+        elif isinstance(mean_function, Model):
+            # Take mean prediction of model as mean function
+            mean_model = mean_function
+            mean_function = lambda X: mean_model.predict_f(X)[0]
+
         super().__init__(
             likelihood=likelihood,
             inducing_variable=inducing_variable,
