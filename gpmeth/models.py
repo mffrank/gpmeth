@@ -14,10 +14,7 @@ from scipy import optimize
 from . import util
 from . import inducing
 from . import plotting
-
-InputData = Union[tf.Tensor]
-OutputData = Union[tf.Tensor]
-RegressionData = Tuple[InputData, OutputData]
+from .util import InputData, OutputData, RegressionData
 
 
 def get_data(data: Union[RegressionData, OutputData]):

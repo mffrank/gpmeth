@@ -5,7 +5,7 @@ from gpflow.models.model import GPModel
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from .models import RegressionData
+from .util import RegressionData
 
 
 # Colors

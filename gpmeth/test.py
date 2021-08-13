@@ -1,7 +1,7 @@
 """Functions to run tests"""
 from typing import Optional, Tuple
 
-from gpflow.models.training_mixins import RegressionData
+from .util import RegressionData
 from . import models as mod
 import os
 

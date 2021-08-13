@@ -1,5 +1,5 @@
 """Utility functions to produce inducing points based on input point locations."""
-from gpflow.models.training_mixins import InputData
+from .util import InputData
 import numpy as np
 import itertools
 

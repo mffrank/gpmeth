@@ -3,7 +3,11 @@ import tensorflow_probability as tfp
 import gpflow
 import numpy as np
 
-from .models import InputData
+from typing import Callable, Iterator, Optional, Tuple, TypeVar, Union
+
+InputData = Union[tf.Tensor]
+OutputData = Union[tf.Tensor]
+RegressionData = Tuple[InputData, OutputData]
 
 
 class InvProbit(tfp.bijectors.Bijector):
