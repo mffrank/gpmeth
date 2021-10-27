@@ -1,4 +1,5 @@
 """Utility functions to produce inducing points based on input point locations."""
+from typing import List, Optional
 from .util import InputData
 import numpy as np
 import itertools
@@ -26,15 +27,24 @@ def make_grid(num_points: int, lower: int = -1, upper: int = 1, input_dim: int =
         a = [np.linspace(lower[i], upper[i], num_points[i]) for i in range(input_dim)]
         grid = np.array([x for x in itertools.product(*a)])
     else:
-        grid = np.linspace(lower, upper, num_points)[:, None]
+        grid = np.linspace(lower, upper, num_points).reshape((-1, 1))
     return grid
 
 
 def make_grid_inducing_points(
-    X: InputData, num_points: int = 100, extend: int = 0, *args, **kwargs
+    X: InputData,
+    num_points: int = 144,
+    extend: int = 0,
+    active_dims: Optional[np.array] = None,
+    *args,
+    **kwargs
 ):
+    if active_dims is not None:
+        ndims = X.shape[1]
+        X = X[:, active_dims]
+
     input_dim = X.shape[1]
-    n_points_axis = int(num_points ** (1 / input_dim))
+    n_points_axis = int(num_points ** (1 / max(input_dim, 1)))
     minima = np.amin(X, axis=0)
     maxima = np.amax(X, axis=0)
     extensions = extend * (maxima - minima)
@@ -46,4 +56,24 @@ def make_grid_inducing_points(
         upper=maxima,
         input_dim=input_dim,
     )
+    if active_dims is not None:
+        Zfull = np.zeros(shape=(grid.shape[0], ndims))
+        Zfull[:, active_dims] = grid
+        grid = Zfull
     return grid
+
+
+def make_categorical_grid_inducing_points(
+    X: InputData, num_points: int = 144, extend: int = 0, *args, **kwargs
+):
+    categories = np.unique(X[:, -1])
+    Xgr = make_grid_inducing_points(
+        X=X[:, :-1],
+        num_points=num_points // len(categories),
+        extend=extend,
+        *args,
+        **kwargs
+    )
+    Z = np.vstack([np.hstack((Xgr, np.zeros_like(Xgr) + i)) for i in categories])
+
+    return Z
