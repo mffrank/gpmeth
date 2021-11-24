@@ -14,7 +14,7 @@ class InvProbit(tfp.bijectors.Bijector):
     """Bijector class for the probit transformation"""
 
     def __init__(self, validate_args=False, name="probit"):
-        super(InvProbit, self).__init__(
+        super().__init__(
             validate_args=validate_args, forward_min_event_ndims=0, name=name
         )
 
@@ -38,8 +38,9 @@ def initialize_kernel_lengthscales(
         if kernel.lengthscales.trainable:
             ad = kernel.active_dims
             ls = span_fraction * (X[:, ad].max(axis=0) - X[:, ad].min(axis=0))
-            if len(ls) == 1:
-                ls = ls[0]
+            ls = max(ls)
+            # if len(ls) == 1:
+            #     ls = ls[0]
             kernel.lengthscales.assign(ls)
         return state
 
