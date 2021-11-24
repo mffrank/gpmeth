@@ -3,6 +3,7 @@ from typing import List, Optional
 from .util import InputData
 import numpy as np
 import itertools
+import scipy
 
 
 def make_grid(num_points: int, lower: int = -1, upper: int = 1, input_dim: int = 2):
@@ -77,3 +78,29 @@ def make_categorical_grid_inducing_points(
     Z = np.vstack([np.hstack((Xgr, np.zeros_like(Xgr) + i)) for i in categories])
 
     return Z
+
+def make_kmeans_inducing_points(
+    X: InputData, num_points: int = 144, *args, **kwargs
+):
+    """
+    Initialize inducing inputs using kmeans(++)
+    :param X:  An array of training inputs X ⊂ 𝑋, with |X| = N < ∞. We frequently assume X= ℝ^D
+    and this is [N,D]
+    :param num_points: integer, number of inducing points to return. Equiv. "k" to use in kmeans
+    :return: Z, None, num_points inducing inputs
+    """
+    N = X.shape[0]
+    # normalize data
+    X_stds = np.std(X, axis=0)
+    if np.min(X_stds) < 1e-13:
+        warnings.warn("One feature of training inputs is constant")
+    X = X / X_stds
+
+    centroids, _ = scipy.cluster.vq.kmeans(X, num_points)
+    # Some times K-num_pointseans returns fewer than K centroids, in this case we sample remaining point from data
+    if len(centroids) < num_points:
+        num_extra_points = num_points - len(centroids)
+        indices = np.random.choice(N, size=num_extra_points, replace=False)
+        additional_points = X[indices]
+        centroids = np.concatenate([centroids, additional_points], axis=0)
+    return centroids * X_stds
