@@ -512,6 +512,14 @@ class RBFLinear(GPFullModel):
             *args,
             **kwargs,
         )
+        gpflow.set_trainable(self.mean_function, True) # Linear needs flexible baseline
+
+    def copy_null_parameters(
+        self, null_model: GPmodel, null_kernel_trainable: bool = False, *args, **kwargs
+    ):
+        super().copy_null_parameters(null_model, null_kernel_trainable, *args, **kwargs)
+        gpflow.set_trainable(self.mean_function, True) # Linear needs flexible baseline
+
 
 
 class RBFMatern(GPFullModel):
