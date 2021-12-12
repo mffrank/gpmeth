@@ -311,6 +311,22 @@ class GPmodel(gpflow.models.SVGP, Model):
             if k.endswith(".variance") and (v.trainable or not only_trainable):
                 v.assign(variance_value)
 
+    # def calculate_genome_variance(
+    #     self,
+    #     n_grid: int = 1000,
+    #     *args,
+    #     **kwargs,
+    # ):
+    #     X_gr = self.get_inducing_points(
+    #         X,
+    #         inducing_point_function=inducing.make_grid_inducing_points,
+    #         num_points=n_grid,
+    #         *args,
+    #         **kwargs,
+    #     )
+    #     p, _ = self.predict_y(X_gr)
+
+
     def plot_predictions(
         self,
         data: RegressionData,
