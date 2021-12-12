@@ -70,10 +70,9 @@ def make_categorical_grid_inducing_points(
     categories = np.unique(X[:, -1])
     Xgr = make_grid_inducing_points(
         X=X[:, :-1],
+        active_dims = [0],
         num_points=num_points // len(categories),
         extend=extend,
-        *args,
-        **kwargs
     )
     Z = np.vstack([np.hstack((Xgr, np.zeros_like(Xgr) + i)) for i in categories])
 
