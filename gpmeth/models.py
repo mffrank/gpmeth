@@ -1,12 +1,8 @@
-from inspect import Attribute
-from gpflow import inducing_variables
-from gpflow.kernels.linears import Polynomial
-from numpy.lib.npyio import genfromtxt
 import tensorflow as tf
 import gpflow
 import tensorflow_probability as tfp
 import numpy as np
-from typing import Callable, Iterator, Optional, Tuple, TypeVar, Union, List
+from typing import Callable, Optional, Tuple, Union, List
 from gpflow.models.model import (
     BayesianModel,
     MeanAndVariance,
@@ -114,14 +110,14 @@ class ConstantCategorical(Model):
 
     def maximum_log_likelihood_objective(self, data) -> tf.Tensor:
         X, Y, cat = self.get_categories_from_data(data)
-        cat_likelihoods = np.empty_like(self._mu)
+        cat_likelihoods = np.empty_like(self._mu.numpy())
         for i in self.categories:
             cat_likelihoods[i] = tf.reduce_sum(
                 tfp.distributions.Bernoulli(
                     probs=self._mu[self.categories == i]
                 ).log_prob(Y[cat == i, -1])
             )
-        print(cat_likelihoods)
+        # print(cat_likelihoods)
 
         return tf.reduce_sum(cat_likelihoods)
 

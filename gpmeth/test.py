@@ -6,24 +6,25 @@ from .util import RegressionData
 from . import models as mod
 import os
 
-all_models_ps = (
-    mod.Constant(),
-    mod.ConstantLinear(),
-    mod.ConstantMatern(),
-    mod.RBFLinear(),
-    mod.RBFMatern(),
-)
-all_models_cat = (
-    mod.ConstantCategorical(),
-    mod.RBFCategorical(),
-)
-
+# all_models_ps = (
+#     mod.Constant(),
+#     mod.ConstantLinear(),
+#     mod.ConstantMatern(),
+#     mod.RBFLinear(),
+#     mod.RBFMatern(),
+# )
+# all_models_cat = (
+#     mod.ConstantCategorical(),
+#     mod.RBFCategorical(),
+# )
+# 
 
 def train_models(
     data: RegressionData,
     models: Tuple[mod.Model],
     null_model: Optional[mod.Model] = None,
     train_null: bool = True,
+    num_inducing: int = 144,
 ):
     # Train in 2 stages:
     # 1st stage: Train null models
@@ -48,10 +49,10 @@ def train_models(
                 null_model.initialize_parameters_from_data(
                     data,
                     inducing_dimensions="fixed",
-                    num_points=144,
+                    num_points=num_inducing,
                 )
                 null_model.optimize(data, initialize_parameters=False)
-                print(f"Model {null_model._name} trained. Took {round(time() - t0)}s")
+                # print(f"Model {null_model._name} trained. Took {round(time() - t0)}s")
                 train_null = False
             # model = model.from_null(null_model)
             model.copy_null_parameters(null_model)
@@ -60,14 +61,14 @@ def train_models(
             model.initialize_parameters_from_data(
                 data,
                 inducing_dimensions="fixed",
-                num_points=144,
+                num_points=num_inducing,
             )
             # if hasattr(model, "inducing_variable"):
             #     print(model.inducing_variable.Z)
         # print(model.to_dict())
         model.optimize(data, initialize_parameters=False)
         trained_models.append(model)
-        print(f"Model {model._name} trained. Took {round(time() - t0)}s")
+        # print(f"Model {model._name} trained. Took {round(time() - t0)}s")
 
     if null_model is not None:
         trained_models.append(null_model)
@@ -75,20 +76,31 @@ def train_models(
     return trained_models
 
 
+# def serialize_dict(dictionary: dict, grp: str, file: str):
+#     for k, v in dictionary.items():
+#         dest = os.path.join(grp, k)
+#         if isinstance(v, dict):
+#             serialize_dict(v, dest, file)
+#         print(v)
+#         file[dest] = v
+
 def save_models(
     model_list, outfile: str, path: Optional[str] = None, attrs: Optional[dict] = None
 ):
     """Saves the models into an hdf5 store"""
     import h5py
 
-    with h5py.File(outfile, "a") as f:
+    with h5py.File(outfile, mode="a") as f:
         for m in model_list:
             grp = os.path.join(path, type(m).__name__)
+            # print(m.to_dict())
             if grp in f:
                 del f[grp]
+            
             for k, v in m.to_dict().items():
                 dest = os.path.join(grp, k)
                 f[dest] = v
+
         if attrs is not None:
             for k, v in attrs.items():
                 f[path].attrs[k] = v
