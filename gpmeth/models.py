@@ -405,12 +405,13 @@ class GPmodel(gpflow.models.SVGP, Model):
 
 class ConstantLinear(GPmodel):
     def __init__(self, pseudotime_dims=[0], *args, **kwargs):
-        kernel = gpflow.kernels.Constant() + gpflow.kernels.Linear(
+        kernel = gpflow.kernels.Linear(
             active_dims=pseudotime_dims
         )
         super().__init__(
             kernel=kernel, pseudotime_dims=pseudotime_dims, *args, **kwargs
         )
+        gpflow.set_trainable(self.mean_function, True)
 
 
 class ConstantMatern(GPmodel):
@@ -498,7 +499,7 @@ class RBFLinear(GPFullModel):
             gpflow.set_trainable(nullkern.lengthscales, False)
 
         gnkern = gpflow.kernels.RBF(active_dims=[genome_dim])
-        pskern = gpflow.kernels.Constant() + gpflow.kernels.Linear(
+        pskern = gpflow.kernels.Linear(
             active_dims=pseudotime_dims
         )
         # In a product kernel the variances become connected
