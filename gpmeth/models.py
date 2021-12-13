@@ -45,7 +45,7 @@ class Model(BayesianModel):
 class Constant(Model):
     """Models outputs with a constant rate"""
 
-    def __init__(self, mu=0.5):
+    def __init__(self, mu=0.5, *args, **kwargs):
         super().__init__()
         self._mu = gpflow.Parameter(mu, transform=util.InvProbit())
 
@@ -70,7 +70,7 @@ class Constant(Model):
 class ConstantCategorical(Model):
     """Models output with a constant rate per category. Assumes the last column of the input is specifying a category."""
 
-    def __init__(self, mu=[0], n_categories=1):
+    def __init__(self, mu=[0], n_categories=1, *args, **kwargs):
         super().__init__()
         self.category_dim = -1
         self._mu = gpflow.Parameter(mu)
