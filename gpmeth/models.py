@@ -185,12 +185,12 @@ class GPmodel(gpflow.models.SVGP, Model):
         genome_dim: Optional[int] = None,
         inducing_variable: Optional[np.array] = None,
         mean_function: Optional[gpflow.mean_functions.MeanFunction] = None,
+        likelihood: gpflow.likelihoods.Likelihood = gpflow.likelihoods.Bernoulli(),
         *args,
         **kwargs,
     ):
         self.pseudotime_dims = pseudotime_dims
         self.genome_dim = genome_dim
-        likelihood = gpflow.likelihoods.Bernoulli()
         if inducing_variable is None:
             inducing_variable = gpflow.inducing_variables.InducingPoints(
                 Z=np.array([0])
@@ -204,9 +204,9 @@ class GPmodel(gpflow.models.SVGP, Model):
             mean_function = lambda X: mean_model.predict_f(X)[0]
 
         super().__init__(
-            likelihood=likelihood,
             inducing_variable=inducing_variable,
             mean_function=mean_function,
+            likelihood=likelihood,
             *args,
             **kwargs,
         )
@@ -267,7 +267,12 @@ class GPmodel(gpflow.models.SVGP, Model):
         gpflow.utilities.set_trainable(self.inducing_variable.Z, False)
 
         # Set the mean function to the mean of the data
-        self.mean_function.c.assign(util.InvProbit()._inverse(Y.mean()))
+        if Y.shape[1] == 1: # Bernoulli data
+            self.mean_function.c.assign(util.InvProbit()._inverse(Y.mean()))
+        elif Y.shape[1] == 2: # Binomial data
+            self.mean_function.c.assign(util.InvProbit()._inverse(Y[:,0].sum() / Y[:,1].sum()))
+        else:
+            raise(ValueError(f"Don't know how to set the mean function for Y of shape {Y.shape}"))
 
         # Initialize lengthscales according to data
         self.initialize_lengthscales(X=X, *args, **kwargs)
@@ -454,8 +459,7 @@ class GPFullModel(GPmodel):
 
         gpflow.utilities.multiple_assign(obj, param_dict)
 
-        if not null_kernel_trainable:
-            gpflow.utilities.set_trainable(obj.kernel.kernels[0], False)
+        gpflow.utilities.set_trainable(obj.kernel.kernels[0], null_kernel_trainable)
 
         # Set remaining variances low in the beginning
         obj.initialize_kernel_variances(variance_value=0.0001, only_trainable=True)
@@ -463,21 +467,22 @@ class GPFullModel(GPmodel):
         return obj
 
     def copy_null_parameters(
-        self, null_model: GPmodel, null_kernel_trainable: bool = False, *args, **kwargs
+        self, null_model: GPmodel, null_kernel_trainable: bool = False, copy_inducing=True, copy_variational=True, *args, **kwargs
     ):
 
-        self.inducing_variable = null_model.inducing_variable
-        self.q_mu = null_model.q_mu
-        self.q_sqrt = null_model.q_sqrt
-        self.q_diag = null_model.q_diag
+        if copy_inducing:
+            self.inducing_variable = null_model.inducing_variable
+        if copy_variational:
+            self.q_mu = null_model.q_mu
+            self.q_sqrt = null_model.q_sqrt
+        if hasattr(null_model, "q_diag"):
+            self.q_diag = null_model.q_diag
 
         # Adjust Null model parameters to fit in full model
         self.kernel.kernels[0] = null_model.kernel
         self.mean_function = null_model.mean_function
 
-        if not null_kernel_trainable:
-            gpflow.utilities.set_trainable(self.kernel.kernels[0], False)
-
+        gpflow.utilities.set_trainable(self.kernel.kernels[0], null_kernel_trainable)
         # Set remaining variances low in the beginning
         self.initialize_kernel_variances(variance_value=0.01, only_trainable=True)
 
@@ -600,7 +605,11 @@ class RBFCategorical(GPFullModel):
             *args,
             **kwargs,
         )
-        gpflow.utilities.multiple_assign(obj, param_dict)
+        try:
+            gpflow.utilities.multiple_assign(obj, param_dict)
+        except tf.errors.InvalidArgumentError:
+            param_dict = {k:v[()]+1e-9 for k, v in param_dict.items()}
+            gpflow.utilities.multiple_assign(obj, param_dict)
         return obj
 
     def initialize_parameters_from_data(

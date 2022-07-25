@@ -1,6 +1,7 @@
 """Functions to run tests"""
 from typing import Optional, Tuple
 from time import time
+import numpy as np
 
 from .util import RegressionData
 from . import models as mod
@@ -85,7 +86,7 @@ def train_models(
 #         file[dest] = v
 
 def save_models(
-    model_list, outfile: str, path: Optional[str] = None, attrs: Optional[dict] = None
+    model_list, outfile: str, path: Optional[str] = None, attrs: Optional[dict] = None, dtype=np.float64
 ):
     """Saves the models into an hdf5 store"""
     import h5py
@@ -99,6 +100,7 @@ def save_models(
             
             for k, v in m.to_dict().items():
                 dest = os.path.join(grp, k)
+                # f.create_dataset(dest, v, dtype=dtype)
                 f[dest] = v
 
         if attrs is not None:

@@ -23,7 +23,8 @@ class InvProbit(tfp.bijectors.Bijector):
         return 0.5 * (1.0 + tf.math.erf(x / np.sqrt(2.0))) * (1 - 2 * jitter) + jitter
 
     def _inverse(self, y):
-        return np.sqrt(2.0) * tf.math.erfinv(2 * y - 1)
+        res = np.sqrt(2.0) * tf.math.erfinv(2 * y - 1)
+        return max(tf.float32.min, min(tf.float32.max, res))
 
 
 def initialize_kernel_lengthscales(
