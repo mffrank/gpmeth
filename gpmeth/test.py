@@ -17,7 +17,8 @@ import os
 #     mod.ConstantCategorical(),
 #     mod.RBFCategorical(),
 # )
-# 
+#
+
 
 def train_models(
     data: RegressionData,
@@ -68,7 +69,7 @@ def train_models(
         # print(model.to_dict())
         model.optimize(data, initialize_parameters=False)
         trained_models.append(model)
-        # print(f"Model {model._name} trained. Took {round(time() - t0)}s")
+        print(f"Model {model._name} trained. Took {round(time() - t0)}s")
 
     if null_model is not None:
         trained_models.append(null_model)
@@ -84,6 +85,7 @@ def train_models(
 #         print(v)
 #         file[dest] = v
 
+
 def save_models(
     model_list, outfile: str, path: Optional[str] = None, attrs: Optional[dict] = None
 ):
@@ -96,11 +98,17 @@ def save_models(
             # print(m.to_dict())
             if grp in f:
                 del f[grp]
-            
+
+            # Write model parameters
             for k, v in m.to_dict().items():
                 dest = os.path.join(grp, k)
                 f[dest] = v
 
+            # Write model init parameters
+            for k, v in m.init_params.items():
+                f[grp].attrs[k] = v
+
+        # Write region information
         if attrs is not None:
             for k, v in attrs.items():
                 f[path].attrs[k] = v
@@ -116,7 +124,7 @@ def read_models(model_store, path):
         for model in models:
             dest = os.path.join(path, model)
             m = getattr(mod, model)
-            model_dict[model] = m.from_dict(f[dest])
+            model_dict[model] = m.from_dict(f[dest], **f[dest].attrs)
     return model_dict, attrs
 
 

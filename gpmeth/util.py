@@ -5,8 +5,8 @@ import numpy as np
 
 from typing import Callable, Iterator, Optional, Tuple, TypeVar, Union
 
-InputData = Union[tf.Tensor]
-OutputData = Union[tf.Tensor]
+InputData = tf.Tensor
+OutputData = tf.Tensor
 RegressionData = Tuple[InputData, OutputData]
 
 
@@ -19,8 +19,10 @@ class InvProbit(tfp.bijectors.Bijector):
         )
 
     def _forward(self, x):
-        jitter = 1e-3  # ensures output is strictly between 0 and 1
-        return 0.5 * (1.0 + tf.math.erf(x / np.sqrt(2.0))) * (1 - 2 * jitter) + jitter
+        # jitter = 1e-3  # ensures output is strictly between 0 and 1
+        return 0.5 * (
+            1.0 + tf.math.erf(x / np.sqrt(2.0))
+        )  # * (1 - 2 * jitter) + jitter
 
     def _inverse(self, y):
         return np.sqrt(2.0) * tf.math.erfinv(2 * y - 1)

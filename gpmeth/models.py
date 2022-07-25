@@ -26,12 +26,18 @@ def get_data(data: Union[RegressionData, OutputData]):
 
 
 class Model(BayesianModel):
+    """Base Class for GPmeth models"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.init_params = {}
+
     def to_dict(self):
         return gpflow.utilities.read_values(self)
 
     @classmethod
-    def from_dict(cls, param_dict: dict):
-        obj = cls()
+    def from_dict(cls, param_dict: dict, *args, **kwargs):
+        obj = cls(*args, **kwargs)
         gpflow.utilities.multiple_assign(obj, param_dict)
         return obj
 
@@ -78,9 +84,9 @@ class ConstantCategorical(Model):
         self.categories = np.arange(n_categories)
 
     @classmethod
-    def from_dict(cls, param_dict: dict):
+    def from_dict(cls, param_dict: dict, *args, **kwargs):
         # Init model with correct shapes for multiple_assign to work
-        obj = cls(mu=np.zeros_like(param_dict["._mu"]))
+        obj = cls(mu=np.zeros_like(param_dict["._mu"]), *args, **kwargs)
         gpflow.utilities.multiple_assign(obj, param_dict)
         return obj
 
@@ -190,6 +196,11 @@ class GPmodel(gpflow.models.SVGP, Model):
     ):
         self.pseudotime_dims = pseudotime_dims
         self.genome_dim = genome_dim
+        self.init_params = {
+            "pseudotime_dims": pseudotime_dims,
+            "genome_dim": genome_dim,
+        }
+
         likelihood = gpflow.likelihoods.Bernoulli()
         if inducing_variable is None:
             inducing_variable = gpflow.inducing_variables.InducingPoints(
@@ -212,9 +223,14 @@ class GPmodel(gpflow.models.SVGP, Model):
         )
 
     @classmethod
-    def from_dict(cls, param_dict: dict):
+    def from_dict(cls, param_dict: dict, *args, **kwargs):
         # Init model with correct shapes for multiple_assign to work
-        obj = cls(inducing_variable=np.zeros_like(param_dict[".inducing_variable.Z"]))
+        obj = cls(
+            inducing_variable=np.zeros_like(param_dict[".inducing_variable.Z"]),
+            *args,
+            **kwargs,
+        )
+        # print(obj)
         gpflow.utilities.multiple_assign(obj, param_dict)
         return obj
 
@@ -326,7 +342,6 @@ class GPmodel(gpflow.models.SVGP, Model):
     #     )
     #     p, _ = self.predict_y(X_gr)
 
-
     def plot_predictions(
         self,
         data: RegressionData,
@@ -405,9 +420,7 @@ class GPmodel(gpflow.models.SVGP, Model):
 
 class ConstantLinear(GPmodel):
     def __init__(self, pseudotime_dims=[0], *args, **kwargs):
-        kernel = gpflow.kernels.Linear(
-            active_dims=pseudotime_dims
-        )
+        kernel = gpflow.kernels.Linear(active_dims=pseudotime_dims)
         super().__init__(
             kernel=kernel, pseudotime_dims=pseudotime_dims, *args, **kwargs
         )
@@ -499,9 +512,7 @@ class RBFLinear(GPFullModel):
             gpflow.set_trainable(nullkern.lengthscales, False)
 
         gnkern = gpflow.kernels.RBF(active_dims=[genome_dim])
-        pskern = gpflow.kernels.Linear(
-            active_dims=pseudotime_dims
-        )
+        pskern = gpflow.kernels.Linear(active_dims=pseudotime_dims)
         # In a product kernel the variances become connected
         gpflow.utilities.set_trainable(gnkern.variance, False)
 
@@ -513,14 +524,13 @@ class RBFLinear(GPFullModel):
             *args,
             **kwargs,
         )
-        gpflow.set_trainable(self.mean_function, True) # Linear needs flexible baseline
+        # gpflow.set_trainable(self.mean_function, True)  # Linear needs flexible baseline
 
     def copy_null_parameters(
         self, null_model: GPmodel, null_kernel_trainable: bool = False, *args, **kwargs
     ):
         super().copy_null_parameters(null_model, null_kernel_trainable, *args, **kwargs)
-        gpflow.set_trainable(self.mean_function, True) # Linear needs flexible baseline
-
+        gpflow.set_trainable(self.mean_function, True)  # Linear needs flexible baseline
 
 
 class RBFMatern(GPFullModel):
@@ -553,6 +563,36 @@ class RBFMatern(GPFullModel):
         )
 
 
+class RBFRBF(GPFullModel):
+    """Model with a product kernel: RBF(genome) * Linear(pseudotime)"""
+
+    def __init__(
+        self,
+        pseudotime_dims=[0],
+        genome_dim=1,
+        fixed_genome_lengthscale=False,
+        *args,
+        **kwargs,
+    ):
+        nullkern = gpflow.kernels.RBF(active_dims=[genome_dim], lengthscales=100)
+        if fixed_genome_lengthscale:
+            gpflow.set_trainable(nullkern.lengthscales, False)
+
+        gnkern = gpflow.kernels.RBF(active_dims=[genome_dim])
+        pskern = gpflow.kernels.RBF(active_dims=pseudotime_dims)
+        # In a product kernel the variances become connected
+        gpflow.utilities.set_trainable(gnkern.variance, False)
+
+        kernel = nullkern + pskern * gnkern
+        super().__init__(
+            kernel=kernel,
+            pseudotime_dims=pseudotime_dims,
+            genome_dim=genome_dim,
+            *args,
+            **kwargs,
+        )
+
+
 class RBFCategorical(GPFullModel):
     """Model with a MultiOutput Kernel that has a shared lengthscale between outputs."""
 
@@ -566,6 +606,10 @@ class RBFCategorical(GPFullModel):
     ):
 
         self.category_dim = -1
+        self.init_params = {
+            "genome_dim": genome_dim,
+            "fixed_genome_lengthscale": fixed_genome_lengthscale,
+        }
 
         nullkern = gpflow.kernels.RBF(active_dims=[genome_dim], lengthscales=100)
         genkern = gpflow.kernels.RBF(active_dims=[genome_dim], lengthscales=100)
