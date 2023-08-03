@@ -3,10 +3,12 @@
 from typing import List, Optional
 from gpflow.models.model import GPModel
 import matplotlib.pyplot as plt
+import matplotlib.collections as collections
+import warnings
+
 import numpy as np
 import seaborn as sns
 from .util import InputData, OutputData, RegressionData
-
 
 # Colors
 met_color_dict = {
@@ -69,11 +71,13 @@ def plot_input_data_categorical_genome(
     Y: OutputData,
     genome_dim: int,
     category_dim: int,
-    ax,
+    ax,    
+    group_names=None,
     *args,
     **kwargs,
 ):
     means = []
+    cov = []
     positions = []
     categories = np.unique(X[:, category_dim])
     for tp in categories:
@@ -82,20 +86,24 @@ def plot_input_data_categorical_genome(
         for pos in np.unique(x[:, genome_dim]):
             f = x[:, genome_dim] == pos
             means.append(y[f].mean())
+            cov.append(y[f].shape[0])
             positions.append((pos, tp))
 
     X = np.array(positions, dtype=np.int)
     Y = np.array(means)
 
-    sns.scatterplot(
+    g = sns.scatterplot(
         x=X[:, 0],
         y=Y,
-        hue=X[:, 1],
+        size = np.array(cov),
+        hue=X[:, category_dim],
         palette=sns.color_palette("tab10", len(categories)),
         ax=ax,
         *args,
         **kwargs,
     )
+
+    return g
 
 
 def plot_input_data_pseudotime(
@@ -123,18 +131,22 @@ def plot_input_data_genome(
 ):
     means = []
     positions = []
+    cov = []
     for pos in np.unique(X[:, genome_dim]):
         f = X[:, genome_dim] == pos
         means.append(Y[f].mean())
+        cov.append(Y[f].shape[0])
         positions.append(pos)
 
     g = sns.scatterplot(
         x=positions,
         y=means,
+        size=cov,
         ax=ax,
         *args,
         **kwargs,
     )
+    g.legend().set_title("coverage")
     return g
 
 
@@ -145,6 +157,7 @@ def plot_model_output(
     pseudotime_dim: Optional[int] = None,
     category_dim: Optional[int] = None,
     ax=None,
+    group_names=None,
     *args,
     **kwargs,
 ):
@@ -176,6 +189,7 @@ def plot_model_output(
                     genome_dim=genome_dim,
                     category_dim=category_dim,
                     ax=ax,
+                    group_names=group_names,
                     *args,
                     **kwargs,
                 )
@@ -212,6 +226,7 @@ def plot_model_categorical_genome(
     category_dim: int,
     genome_dim: int,
     ax,
+    group_names=None,
     *args,
     **kwargs,
 ):
@@ -224,6 +239,9 @@ def plot_model_categorical_genome(
         *args,
         **kwargs,
     )
+    if group_names is not None:
+        ax.legend(ax.get_legend_handles_labels()[0], group_names)
+
     return g
 
 
@@ -283,39 +301,34 @@ def plot_prediction_contours(
 
     if fixed_clevels:
         clevels = np.linspace(0, 1, n_contours)
-
-        cs = ax.tricontour(
-            X_gr[:, genome_dim],
-            X_gr[:, pseudotime_dim],
-            p.numpy().flatten(),
-            levels=clevels[clevels != 0.5],
-            linewidths=2,
-            cmap="jet",
-            *args,
-            **kwargs,
-        )
-        ax.clabel(cs)
-        cs = ax.tricontour(
-            X_gr[:, genome_dim],
-            X_gr[:, pseudotime_dim],
-            p.numpy().flatten(),
-            levels=[0.5],
-            linewidths=4,
-            *args,
-            **kwargs,
-        )
-        ax.clabel(cs)
-        # Fill with color
-        ax.tricontourf(
-            X_gr[:, genome_dim],
-            X_gr[:, pseudotime_dim],
-            p.numpy().flatten(),
-            levels=clevels,
-            cmap="jet",
-            alpha=0.2,
-            *args,
-            **kwargs,
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="No contour levels were found within the data range.")
+            cs = ax.tricontour(
+                X_gr[:, genome_dim],
+                X_gr[:, pseudotime_dim],
+                p.numpy().flatten(),
+                levels=clevels[clevels != 0.5],
+                linewidths=1,
+                cmap="jet",
+            )
+            ax.clabel(cs)
+            cs = ax.tricontour(
+                X_gr[:, genome_dim],
+                X_gr[:, pseudotime_dim],
+                p.numpy().flatten(),
+                levels=[0.5],
+                linewidths=2,
+            )
+            ax.clabel(cs)
+            # Fill with color
+            ax.tricontourf(
+                X_gr[:, genome_dim],
+                X_gr[:, pseudotime_dim],
+                p.numpy().flatten(),
+                levels=clevels,
+                cmap="jet",
+                alpha=0.2,
+            )
     else:
         cs = ax.tricontour(
             X_gr[:, genome_dim],
@@ -323,8 +336,6 @@ def plot_prediction_contours(
             p.numpy().flatten(),
             linewidths=2,
             cmap="jet",
-            *args,
-            **kwargs,
         )
         ax.tricontourf(
             X_gr[:, genome_dim],
@@ -332,8 +343,6 @@ def plot_prediction_contours(
             p[:, 0],
             cmap="jet",
             alpha=0.2,
-            *args,
-            **kwargs,
         )
 
 
@@ -342,3 +351,32 @@ def plot_inducing_points(model: GPModel, ax=None):
     Z = model.inducing_variable.Z.numpy()
     g = ax.scatter(Z[:, 1], Z[:, 0], marker="x", c="grey")
     return g
+
+def plot_minmax(
+    X_gr: np.array,
+    p: np.array,
+    genome_dim: int,
+    pseudotime_dim: int,
+    minmax_threshold: Optional[float] = None,
+    ax=None,
+):
+    if ax is None:
+        fig, ax = plt.subplots()
+    n_grid = int(X_gr.shape[0]**0.5) # Always square grid
+    psq = p.numpy().reshape((n_grid, -1))
+    x = np.unique(X_gr[:,genome_dim])
+    mins = np.min(psq, axis=genome_dim)
+    maxs = np.max(psq, axis=genome_dim)
+    _plot_minmax(x, maxs-mins, minmax_threshold, ax)
+
+    
+def _plot_minmax(x, y, minmax_threshold, ax):
+    ax.plot(x, y)
+    ax.set_ylim(0,1)
+    ax.set_ylabel("minmax")
+    if minmax_threshold is not None:
+        ax.axhline(y=minmax_threshold, color="black", linestyle="--")
+        
+        collection = collections.BrokenBarHCollection.span_where(
+            x, ymin=0, ymax=1, where=y > minmax_threshold, facecolor='grey', alpha=0.5)
+        ax.add_collection(collection)

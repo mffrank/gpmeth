@@ -5,7 +5,6 @@ import numpy as np
 import itertools
 import scipy
 
-
 def make_grid(num_points: int, lower: int = -1, upper: int = 1, input_dim: int = 2):
 
     # Make sure bounds have the same dimensions as input dim
@@ -79,7 +78,7 @@ def make_categorical_grid_inducing_points(
     return Z
 
 def make_kmeans_inducing_points(
-    X: InputData, num_points: int = 144, *args, **kwargs
+    X: InputData, num_points: int = 144, seed: int=42,*args, **kwargs
 ):
     """
     Initialize inducing inputs using kmeans(++)
@@ -95,7 +94,7 @@ def make_kmeans_inducing_points(
         warnings.warn("One feature of training inputs is constant")
     X = X / X_stds
 
-    centroids, _ = scipy.cluster.vq.kmeans(X, num_points)
+    centroids, _ = scipy.cluster.vq.kmeans(X, num_points, seed=seed)
     # Some times K-num_pointseans returns fewer than K centroids, in this case we sample remaining point from data
     if len(centroids) < num_points:
         num_extra_points = num_points - len(centroids)

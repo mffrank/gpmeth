@@ -42,6 +42,7 @@ def initialize_kernel_lengthscales(
             ad = kernel.active_dims
             ls = span_fraction * (X[:, ad].max(axis=0) - X[:, ad].min(axis=0))
             ls = max(ls)
+
             # if len(ls) == 1:
             #     ls = ls[0]
             kernel.lengthscales.assign(ls)
@@ -51,3 +52,11 @@ def initialize_kernel_lengthscales(
         input_module, accumulator, update_state, target_types
     )
     return
+
+def bounded_lengthscale(low, high, lengthscale=None):
+    """Make lengthscale tfp Parameter with optimization bounds."""
+    if lengthscale is None:
+        lengthscale = (low + high) / 2
+    sigmoid = tfp.bijectors.Sigmoid(tf.cast(low, 'double'), tf.cast(high, 'double'))
+    parameter = gpflow.Parameter(lengthscale, transform=sigmoid, dtype='double')
+    return parameter
