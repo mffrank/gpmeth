@@ -311,7 +311,7 @@ def plot_prediction_contours(
                 linewidths=1,
                 cmap="jet",
             )
-            ax.clabel(cs)
+            # ax.clabel(cs)
             cs = ax.tricontour(
                 X_gr[:, genome_dim],
                 X_gr[:, pseudotime_dim],
@@ -321,7 +321,7 @@ def plot_prediction_contours(
             )
             ax.clabel(cs)
             # Fill with color
-            ax.tricontourf(
+            cs=ax.tricontourf(
                 X_gr[:, genome_dim],
                 X_gr[:, pseudotime_dim],
                 p.numpy().flatten(),
@@ -329,6 +329,7 @@ def plot_prediction_contours(
                 cmap="jet",
                 alpha=0.2,
             )
+            plt.colorbar(cs)
     else:
         cs = ax.tricontour(
             X_gr[:, genome_dim],
