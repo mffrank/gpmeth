@@ -10,7 +10,6 @@ from gpflow.models.model import (
 import copy
 import matplotlib.pyplot as plt
 import seaborn as sns
-import robustgp
 from scipy import optimize
 from . import util
 from . import inducing
@@ -358,6 +357,7 @@ class GPmodel(gpflow.models.SVGP, Model):
     def compute_robustgp_inducing_points(
         self, X: InputData, num_points: int = 144, *args, **kwargs
     ):
+        import robustgp
         cv = robustgp.ConditionalVariance()
         return cv.compute_initialisation(X, num_points, self.kernel)[0]
 
@@ -423,6 +423,7 @@ class GPmodel(gpflow.models.SVGP, Model):
             *args,
             **kwargs,
         )
+        return X_gr, p
 
     def plot_predictions(
         self,
@@ -531,7 +532,7 @@ class GPmodel(gpflow.models.SVGP, Model):
 
 class ContinuousGPModel:
     def calculate_minmax(self, X_gr=None):
-        if not X_gr:
+        if X_gr is None:
             X_gr = self.inducing_variable.Z.numpy()
         p, v = self.predict_y(X_gr)
         n_grid = int(X_gr.shape[0] ** 0.5)  # Always square grid
