@@ -319,7 +319,7 @@ def plot_prediction_contours(
                 levels=[0.5],
                 linewidths=2,
             )
-            ax.clabel(cs)
+            #ax.clabel(cs)
             # Fill with color
             cs=ax.tricontourf(
                 X_gr[:, genome_dim],
@@ -372,12 +372,13 @@ def plot_minmax(
 
     
 def _plot_minmax(x, y, minmax_threshold, ax):
-    ax.plot(x, y)
+    ax.plot(x, y[:,1], color='blue')
+    ax.fill_between(x, y[:,0], y[:,2], color='blue', alpha=0.3)
     ax.set_ylim(0,1)
     ax.set_ylabel("minmax")
     if minmax_threshold is not None:
         ax.axhline(y=minmax_threshold, color="black", linestyle="--")
         
         collection = collections.BrokenBarHCollection.span_where(
-            x, ymin=0, ymax=1, where=y > minmax_threshold, facecolor='grey', alpha=0.5)
+            x, ymin=0, ymax=1, where=y[:,1] > minmax_threshold, facecolor='grey', alpha=0.5)
         ax.add_collection(collection)

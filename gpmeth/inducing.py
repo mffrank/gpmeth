@@ -30,7 +30,16 @@ def make_grid(num_points: int, lower: int = -1, upper: int = 1, input_dim: int =
         grid = np.linspace(lower, upper, num_points).reshape((-1, 1))
     return grid
 
-
+    
+def make_subsample_inducing_points(
+    X: InputData,
+    num_points: int = 144,
+    *args,
+    **kwargs
+):
+    rng = np.random.default_rng(33) # Fixed seed for reproducibility
+    return X[rng.choice(X.shape[0], size=num_points, replace=False)]
+    
 def make_grid_inducing_points(
     X: InputData,
     num_points: int = 144,

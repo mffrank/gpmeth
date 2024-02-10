@@ -61,6 +61,7 @@ def train_models(
                     inducing_dimensions="fixed",
                     num_points=num_inducing,
                     initialize_lengthscales=initialize_lengthscales,
+                    **kwargs
                 )
                 # display(null_model)
                 optres = null_model.optimize(data, initialize_parameters=False)
