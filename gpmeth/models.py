@@ -274,6 +274,7 @@ class GPmodel(gpflow.models.SVGP, Model):
         self,
         data: RegressionData,
         initialize_parameters: bool = True,
+        scipy_opts={},
         *args,
         **kwargs,
     ) -> optimize.OptimizeResult:
@@ -285,7 +286,7 @@ class GPmodel(gpflow.models.SVGP, Model):
         # Do the optimization
         o = gpflow.optimizers.Scipy()
         training_loss = self.training_loss_closure(data)
-        fitres = o.minimize(training_loss, variables=self.trainable_variables)
+        fitres = o.minimize(training_loss, variables=self.trainable_variables, **scipy_opts)
         return fitres
 
     def initialize_parameters_from_data(
@@ -463,6 +464,9 @@ class GPmodel(gpflow.models.SVGP, Model):
                 or f"Model: {self._name}, Max_LL_objective: {self.maximum_log_likelihood_objective(data)}"
             )
             ax.set_title(title)
+            
+        if plot_inducing:
+            g = plotting.plot_inducing_points(self, ax=ax)
 
         # Plot data
         g = plotting.plot_input_data(
@@ -491,18 +495,18 @@ class GPmodel(gpflow.models.SVGP, Model):
             *args,
             **kwargs,
         )
-        if plot_inducing:
-            g = plotting.plot_inducing_points(self, ax=ax)
 
         if plot_minmax:
-            g = plotting.plot_minmax(
-                X_gr,
-                p,
-                genome_dim,
-                pseudotime_dim,
-                ax=ax2,
-                minmax_threshold=minmax_threshold,
-            )
+            pos, q = self.calculate_minmax_q(X_gr=X_gr)
+            g = plotting._plot_minmax(pos, q.T, minmax_threshold=minmax_threshold, ax=ax2)
+            # g = plotting.plot_minmax(
+            #     X_gr,
+            #     p,
+            #     genome_dim,
+            #     pseudotime_dim,
+            #     ax=ax2,
+            #     minmax_threshold=minmax_threshold,
+            # )
 
         return g
 
@@ -531,15 +535,42 @@ class GPmodel(gpflow.models.SVGP, Model):
 
 class ContinuousGPModel:
     def calculate_minmax(self, X_gr=None):
-        if not X_gr:
+        if X_gr is None:
             X_gr = self.inducing_variable.Z.numpy()
         p, v = self.predict_y(X_gr)
+        p = p.numpy()
+        genome = X_gr[:,self.genome_dim]
+        positions = np.unique(genome)
+        # Calculate max-min difference for each group in array2
+        differences = np.array([p[genome == value].max() - p[genome == value].min() 
+                                for value in positions])
+        return positions, differences
+        # n_grid = int(X_gr.shape[0] ** 0.5)  # Always square grid
+        # psq = p.numpy().reshape((n_grid, -1))
+        # x = np.unique(X_gr[:, 1])
+        # mins = np.min(psq, axis=self.genome_dim)
+        # maxs = np.max(psq, axis=self.genome_dim)
+        # return np.array(x, ndmin=1), np.array(maxs - mins, ndmin=1)
+    def calculate_minmax_q(self, X_gr=None, n_grid=2500, n_samples=10000, q=[0.05, 0.5, 0.95]):
+        if X_gr is None:
+            X_gr =  self.get_inducing_points(
+                        self.inducing_variable.Z.numpy(),
+                        inducing_point_function=inducing.make_grid_inducing_points,
+                        num_points=n_grid,
+                        inducing_dimensions="fixed",
+            )
+        p = self.likelihood.invlink(self.predict_f_samples(X_gr, num_samples=n_samples)).numpy()
+        genome = X_gr[:,self.genome_dim]
+        positions = np.unique(genome)
+
         n_grid = int(X_gr.shape[0] ** 0.5)  # Always square grid
-        psq = p.numpy().reshape((n_grid, -1))
-        x = np.unique(X_gr[:, 1])
-        mins = np.min(psq, axis=self.genome_dim)
-        maxs = np.max(psq, axis=self.genome_dim)
-        return np.array(x, ndmin=1), np.array(maxs - mins, ndmin=1)
+        psq = p.reshape((n_samples, n_grid, -1))
+        x = np.unique(X_gr[:, self.genome_dim])
+        mins = np.min(psq, axis=self.genome_dim+1)
+        maxs = np.max(psq, axis=self.genome_dim+1)
+        diffs = maxs-mins
+        qdiff = np.quantile(diffs, q=q, axis=0)
+        return np.array(x, ndmin=1), np.array(qdiff, ndmin=1)
 
 
 class ConstantLinear(ContinuousGPModel, GPmodel):
@@ -876,6 +907,8 @@ class RBFCategorical(GPFullModel):
         n_grid: int = 1000,
         plot_title: bool = True,
         title: Optional[str] = None,
+        plot_minmax: Optional[bool] = False,
+        minmax_threshold: int = 0.3,
         group_names=None,
         fig: Optional[plt.figure] = None,
         *args,
@@ -888,7 +921,14 @@ class RBFCategorical(GPFullModel):
             pseudotime_dim = pseudotime_dim[0]
 
         fig = fig or plt.figure()
-        ax = fig.subplots()
+        if plot_minmax:
+            ax, ax2 = fig.subplots(
+                2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True
+            )
+            fig.subplots_adjust(hspace=0)
+        else:
+            ax = fig.subplots()
+
         if plot_title:
             title = (
                 title
@@ -918,7 +958,29 @@ class RBFCategorical(GPFullModel):
             group_names=group_names,
             ax=ax,
         )
+        if plot_minmax:
+            pos, q = self.calculate_minmax_q(X_gr=X_gr)
+            g = plotting._plot_minmax(pos, q.T, minmax_threshold=minmax_threshold, ax=ax2)
         return g
+    
+    def calculate_minmax_q(self, X_gr=None, n_grid=2500, n_samples=10000, q=[0.05, 0.5, 0.95]):
+        Z = self.inducing_variable.Z
+        categories = np.unique(Z[:, -1])
+        if X_gr is None:
+            X_gr = Z.numpy()
+
+        p = self.likelihood.invlink(self.predict_f_samples(X_gr, num_samples=n_samples)).numpy()
+        genome = X_gr[:,self.genome_dim]
+        positions = np.unique(genome)
+
+        psq = p.reshape((n_samples, len(categories), -1))
+        n_pts = X_gr.shape[0] / len(categories)
+        x = X_gr[: int(n_pts), 0]
+        mins = np.min(psq, axis=self.genome_dim+1)
+        maxs = np.max(psq, axis=self.genome_dim+1)
+        diffs = maxs-mins
+        qdiff = np.quantile(diffs, q=q, axis=0)
+        return np.array(x, ndmin=1), np.array(qdiff, ndmin=1)
 
     def calculate_minmax(self, X_gr=None):
         Z = self.inducing_variable.Z
