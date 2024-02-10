@@ -118,37 +118,52 @@ def save_models(
     """Saves the models into an hdf5 store"""
     import h5py
 
-    with h5py.File(outfile, mode="a") as f:
+    if isinstance(outfile, h5py.File):
+        f = outfile
+    else:
+        f = h5py.File(outfile, mode="a")
+
+    try:
         for m in model_list:
             grp = os.path.join(path, type(m).__name__) if path else type(m).__name__
+            try:
+                # print(m.to_dict())
+                if grp in f:
+                    del f[grp]
 
-            # print(m.to_dict())
-            if grp in f:
-                del f[grp]
-
-            # Write model parameters
-            for k, v in m.to_dict().items():
-                dest = os.path.join(grp, k)
-                # f.create_dataset(dest, v, dtype=dtype)
-                f[dest] = v
-                
-            # Write prior parameters
-            for k, v in m.prior_dict().items():
-                dest = os.path.join(grp, k)
-                f[dest].attrs["prior_params"] = json.dumps(v.parameters)
-                f[dest].attrs["prior_type"] = type(v).__name__
-                
-            # Write init parameters
-            for k, v in m.init_params.items():
-                f[grp].attrs[k] = v if v is not None else -1 # We save None as -1
+                # Write model parameters
+                for k, v in m.to_dict().items():
+                    dest = os.path.join(grp, k)
+                    # f.create_dataset(dest, v, dtype=dtype)
+                    f[dest] = v
+                    
+                # Write prior parameters
+                for k, v in m.prior_dict().items():
+                    dest = os.path.join(grp, k)
+                    f[dest].attrs["prior_params"] = json.dumps(v.parameters)
+                    f[dest].attrs["prior_type"] = type(v).__name__
+                    
+                # Write init parameters
+                for k, v in m.init_params.items():
+                    f[grp].attrs[k] = v if v is not None else -1 # We save None as -1
+            except Exception as e:
+                if grp in f:
+                    del f[grp]
 
         # Write region information
         if attrs is not None:
             for k, v in attrs.items():
                 f[path].attrs[k] = v
+    except Exception as e:
+        print(e)
+    finally:
+        # Close if we didn't get an accessor
+        if not isinstance(outfile, h5py.File):
+            f.close()
 
 
-def read_models(model_store, path):
+
+def read_models(model_store, path, models=None):
     import h5py
 
     model_dict = dict()
@@ -157,8 +172,12 @@ def read_models(model_store, path):
     else:
         f = h5py.File(model_store, "r")
     attrs = dict(f[path].attrs)
-    models = list(f[path].keys())
-    models = [x for x in models if x != 'ConstantLinear']
+    keys = list(f[path].keys())
+    keys = [x for x in models if x != 'ConstantLinear']
+    if models is not None:
+        models = [v for v in keys if v in models]
+    else:
+        models = keys
     # print(models)
     for model in models:
         dest = os.path.join(path, model)
